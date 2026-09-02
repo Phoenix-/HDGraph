@@ -1,6 +1,13 @@
-# HDGraph (rewrite)
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.svg">
+    <img src="docs/logo.svg" width="282" alt="HDGraph">
+  </picture>
+</p>
 
+<p align="center">
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![CI](https://github.com/Phoenix-/HDGraph/actions/workflows/ci.yml/badge.svg)](https://github.com/Phoenix-/HDGraph/actions/workflows/ci.yml)
+</p>
 
 A fresh, DPI-aware take on [HDGraph](https://www.hdgraph.com): where did the disk space go, drawn as
 concentric rings. Windows-first, built on .NET 10 and Avalonia with the FluentAvalonia theme, so it looks
@@ -17,6 +24,8 @@ for reference only; nothing is reused. This rewrite is MIT-licensed, see [LICENS
 | `src/HDGraph.Geometry` | Sunburst maths: sectors (angles, radii) for a tree, and the hit test. Pure, testable. |
 | `src/HDGraph.App` | Avalonia shell: `SunburstControl` (custom-drawn rings, labels, pointer handling), MVVM with CommunityToolkit, Mica window. |
 | `tests/HDGraph.Tests` | xUnit tests for Core and Geometry, run against a temp directory tree. |
+| `docs` | The README logo, light and dark. |
+| `tools` | `Make-Icon.ps1` rebuilds `src/HDGraph.App/Assets/hdgraph.ico` from the SVG sources next to it (needs ImageMagick 7); the `.ico` is committed, so the build does not depend on it. |
 
 ## Build and run
 

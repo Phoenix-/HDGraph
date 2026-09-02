@@ -5,11 +5,16 @@
     <AssemblyName>hdgraph</AssemblyName>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <ApplicationIcon>Assets\hdgraph.ico</ApplicationIcon>
 
     <!-- .NET 9+ links executables with /CETCOMPAT; on a CET-capable CPU with a not fully patched Windows such
          a binary refuses to start. A disk-usage tool must launch on whatever Windows it lands on. -->
     <CETCompat>false</CETCompat>
   </PropertyGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\hdgraph.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.1.2" />

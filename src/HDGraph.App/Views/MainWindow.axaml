@@ -5,6 +5,7 @@
         x:Class="HDGraph.App.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="HDGraph"
+        Icon="/Assets/hdgraph.ico"
         Width="1240" Height="820"
         MinWidth="720" MinHeight="480"
         Background="Transparent"
