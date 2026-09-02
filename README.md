@@ -87,9 +87,12 @@ git push origin v0.2.0
 
 [`.github/workflows/release.yml`](.github/workflows/release.yml) builds that commit, runs the tests, publishes the AOT
 exe, checks that the exe reports the tag's version, and creates a **draft** GitHub Release with `hdgraph-win-x64.exe`,
-its SHA-256 and generated notes. Read the notes, edit if needed, press Publish. From then on
-<https://github.com/Phoenix-/HDGraph/releases/latest/download/hdgraph-win-x64.exe> points at that build. A tag with a
-pre-release suffix (`v0.2.0-beta.1`) is marked pre-release and never becomes `latest`.
+its SHA-256, `hdgraph-win-x64-symbols.zip` and generated notes. Read the notes, edit if needed, press Publish. From
+then on <https://github.com/Phoenix-/HDGraph/releases/latest/download/hdgraph-win-x64.exe> points at that build. A tag
+with a pre-release suffix (`v0.2.0-beta.1`) is marked pre-release and never becomes `latest`.
+
+The symbols zip is the `hdgraph.pdb` of that exact build. Users never need it: to read a crash dump later, take the
+version from the window title (or the exe properties), fetch the zip from that release, and the dump resolves.
 
 ## Using it
 

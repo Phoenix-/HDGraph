@@ -1,8 +1,9 @@
 name: Release
 
 # Pushing a tag vX.Y.Z builds that commit, checks the exe carries the tag's version and creates a DRAFT GitHub Release
-# with the exe and its SHA-256. Publishing the draft is a manual click, so notes can be reviewed first. A tag with a
-# pre-release suffix (v1.2.0-beta.1) is marked pre-release and never becomes "latest". See README, "Versions and releases".
+# with the exe, its SHA-256 and a zip of the matching pdb. Publishing the draft is a manual click, so notes can be
+# reviewed first. A tag with a pre-release suffix (v1.2.0-beta.1) is marked pre-release and never becomes "latest".
+# See README, "Versions and releases".
 on:
   push:
     tags: ['v*']
@@ -62,10 +63,13 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory dist | Out-Null
-          Copy-Item src/HDGraph.App/bin/publish/aot-win-x64/hdgraph.exe dist/hdgraph-win-x64.exe
+          $publish = 'src/HDGraph.App/bin/publish/aot-win-x64'
+          Copy-Item $publish/hdgraph.exe dist/hdgraph-win-x64.exe
           $hash = (Get-FileHash dist/hdgraph-win-x64.exe -Algorithm SHA256).Hash.ToLowerInvariant()
           # sha256sum -c format. Not Set-Content: its -NoNewline is a provider-specific parameter and the runner rejected it.
           [IO.File]::WriteAllText("$PWD/dist/hdgraph-win-x64.exe.sha256", "$hash *hdgraph-win-x64.exe`n")
+          # The pdb of this exact build (about 125 MB, 26 MB zipped). Users never need it; a crash dump does.
+          Compress-Archive -Path $publish/hdgraph.pdb -DestinationPath dist/hdgraph-win-x64-symbols.zip -CompressionLevel Optimal
           Get-ChildItem dist | Format-Table Name, Length
 
       - name: Create the draft release
@@ -76,4 +80,4 @@ jobs:
           $tag = '${{ github.ref_name }}'
           $flags = @('--draft', '--generate-notes', '--verify-tag', '--title', "HDGraph $tag")
           if ($tag -match '-') { $flags += '--prerelease' }
-          gh release create $tag dist/hdgraph-win-x64.exe dist/hdgraph-win-x64.exe.sha256 @flags
+          gh release create $tag dist/hdgraph-win-x64.exe dist/hdgraph-win-x64.exe.sha256 dist/hdgraph-win-x64-symbols.zip @flags
