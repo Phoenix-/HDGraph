@@ -1,0 +1,115 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:HDGraph.App.ViewModels"
+        xmlns:controls="using:HDGraph.App.Controls"
+        x:Class="HDGraph.App.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="HDGraph"
+        Width="1240" Height="820"
+        MinWidth="720" MinHeight="480"
+        Background="Transparent"
+        TransparencyLevelHint="Mica, AcrylicBlur, Transparent">
+    <Design.DataContext>
+        <vm:MainWindowViewModel />
+    </Design.DataContext>
+
+    <Window.Resources>
+        <SolidColorBrush x:Key="CardBackground" Color="#B3FFFFFF" />
+        <SolidColorBrush x:Key="CardBorder" Color="#1A000000" />
+    </Window.Resources>
+
+    <Grid RowDefinitions="Auto,*,Auto" Margin="16" RowSpacing="12">
+
+        <!-- Toolbar: path, browse, scan/cancel, drive shortcuts -->
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
+            <TextBox Grid.Column="0"
+                     Text="{Binding PathText}"
+                     PlaceholderText="Folder or drive to scan"
+                     IsEnabled="{Binding !IsScanning}" />
+            <Button Grid.Column="1" Content="Browse…" Command="{Binding BrowseCommand}" IsEnabled="{Binding !IsScanning}" />
+            <Button Grid.Column="2" Content="Scan" Classes="accent" MinWidth="90"
+                    Command="{Binding ScanCommand}" IsVisible="{Binding !IsScanning}" IsDefault="True" />
+            <Button Grid.Column="2" Content="Cancel" MinWidth="90"
+                    Command="{Binding ScanCancelCommand}" IsVisible="{Binding IsScanning}" />
+            <ItemsControl Grid.Column="3" ItemsSource="{Binding Drives}" Margin="8,0,0,0">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" Spacing="6" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:DriveItem">
+                        <Button Content="{Binding Label}"
+                                ToolTip.Tip="{Binding Tooltip}"
+                                Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).ScanDriveCommand}"
+                                CommandParameter="{Binding}" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </Grid>
+
+        <!-- Chart and details -->
+        <Grid Grid.Row="1" ColumnDefinitions="*,300" ColumnSpacing="12">
+
+            <Border Grid.Column="0" Background="{StaticResource CardBackground}" BorderBrush="{StaticResource CardBorder}"
+                    BorderThickness="1" CornerRadius="8" Padding="12">
+                <Grid RowDefinitions="Auto,*" RowSpacing="8">
+                    <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,*" ColumnSpacing="8">
+                        <Button Grid.Column="0" Content="Up" Command="{Binding GoUpCommand}" ToolTip.Tip="Centre on the parent folder" />
+                        <Button Grid.Column="1" Content="Home" Command="{Binding GoHomeCommand}" ToolTip.Tip="Centre on the scanned folder" />
+                        <SelectableTextBlock Grid.Column="2" Text="{Binding ViewRootPath}" VerticalAlignment="Center"
+                                             TextTrimming="CharacterEllipsis" Opacity="0.8" />
+                    </Grid>
+                    <controls:SunburstControl Grid.Row="1"
+                                              x:Name="Chart"
+                                              Root="{Binding ViewRoot}"
+                                              Rings="{Binding Rings}"
+                                              Rotation="{Binding Rotation}"
+                                              ShowSizes="{Binding ShowSizes}"
+                                              HoveredNode="{Binding HoveredNode, Mode=OneWayToSource}"
+                                              ContextNode="{Binding ContextNode, Mode=OneWayToSource}"
+                                              ActivateCommand="{Binding NavigateToCommand}">
+                        <controls:SunburstControl.ContextFlyout>
+                            <MenuFlyout>
+                                <MenuItem Header="Centre on this folder" Command="{Binding NavigateToCommand}" CommandParameter="{Binding ContextNode}" />
+                                <MenuItem Header="Rescan from here" Command="{Binding RescanCommand}" CommandParameter="{Binding ContextNode}" />
+                                <Separator />
+                                <MenuItem Header="Open in Explorer" Command="{Binding OpenInExplorerCommand}" CommandParameter="{Binding ContextNode}" />
+                                <MenuItem Header="Copy path" Command="{Binding CopyPathCommand}" CommandParameter="{Binding ContextNode}" />
+                            </MenuFlyout>
+                        </controls:SunburstControl.ContextFlyout>
+                    </controls:SunburstControl>
+                </Grid>
+            </Border>
+
+            <Border Grid.Column="1" Background="{StaticResource CardBackground}" BorderBrush="{StaticResource CardBorder}"
+                    BorderThickness="1" CornerRadius="8" Padding="16">
+                <Grid RowDefinitions="*,Auto">
+                    <StackPanel Grid.Row="0" Spacing="6" IsVisible="{Binding HasDetail}">
+                        <TextBlock Text="{Binding DetailName}" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <SelectableTextBlock Text="{Binding DetailPath}" Opacity="0.7" TextWrapping="Wrap" FontSize="12" />
+                        <TextBlock Text="{Binding DetailSize}" FontSize="26" FontWeight="SemiBold" Margin="0,8,0,0" />
+                        <TextBlock Text="{Binding DetailShare}" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding DetailContents}" TextWrapping="Wrap" Opacity="0.8" Margin="0,8,0,0" />
+                        <TextBlock Text="{Binding DetailError}" TextWrapping="Wrap" Foreground="#C42B1C" Margin="0,8,0,0"
+                                   IsVisible="{Binding HasDetailError}" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="1" Spacing="4">
+                        <TextBlock Text="Rings" Opacity="0.8" />
+                        <Slider Minimum="2" Maximum="10" TickFrequency="1" IsSnapToTickEnabled="True" Value="{Binding Rings}" />
+                        <TextBlock Text="Rotation" Opacity="0.8" />
+                        <Slider Minimum="0" Maximum="360" Value="{Binding Rotation}" />
+                        <CheckBox Content="Show sizes on the chart" IsChecked="{Binding ShowSizes}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- Status -->
+        <Grid Grid.Row="2" ColumnDefinitions="*,Auto" ColumnSpacing="12">
+            <TextBlock Grid.Column="0" Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Opacity="0.85" />
+            <ProgressBar Grid.Column="1" Width="160" IsIndeterminate="True" IsVisible="{Binding IsScanning}" />
+        </Grid>
+    </Grid>
+</Window>

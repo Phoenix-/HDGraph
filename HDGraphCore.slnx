@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/HDGraph.App/HDGraph.App.csproj" />
+    <Project Path="src/HDGraph.Core/HDGraph.Core.csproj" />
+    <Project Path="src/HDGraph.Geometry/HDGraph.Geometry.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/HDGraph.Tests/HDGraph.Tests.csproj" />
+  </Folder>
+</Solution>
