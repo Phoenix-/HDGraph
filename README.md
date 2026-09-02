@@ -1,10 +1,13 @@
 # HDGraph (rewrite)
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 A fresh, DPI-aware take on [HDGraph](https://www.hdgraph.com): where did the disk space go, drawn as
 concentric rings. Windows-first, built on .NET 10 and Avalonia with the FluentAvalonia theme, so it looks
 like a Windows 11 app (Mica backdrop included) and renders crisply at any scaling.
 
-The original 2006–2015 sources are kept in `hdgraph-code-r383/` for reference only; nothing is reused.
+The original 2006–2015 sources (CeCILL v2) are kept on the orphan branch `legacy/hdgraph-1.5.1-svn-r383`
+for reference only; nothing is reused. This rewrite is MIT-licensed, see [LICENSE](LICENSE).
 
 ## Layout
 
