@@ -28,6 +28,37 @@ dotnet run --project src/HDGraph.App -- "C:\Program Files"
 
 Passing a path scans it on start; without one, pick a folder or click a drive button.
 
+## Publishing
+
+Two profiles live in `src/HDGraph.App/Properties/PublishProfiles`.
+
+```
+dotnet publish src/HDGraph.App -p:PublishProfile=aot-win-x64
+```
+
+Native AOT: one self-contained `hdgraph.exe` (about 39 MB) in `src/HDGraph.App/bin/publish/aot-win-x64`, no .NET
+runtime and no DLLs next to it. Skia, HarfBuzz and ANGLE are linked in statically from the community packages
+`CoreUtils.SkiaSharp.Static` / `CoreUtils.ANGLE.Static`. The `hdgraph.pdb` beside the exe is for symbolicating
+crash stacks; it is not needed to run. Requires the Visual Studio "Desktop development with C++" workload, because
+the AOT compiler links with `link.exe`. Takes under a minute on a desktop CPU.
+
+```
+dotnet publish src/HDGraph.App -p:PublishProfile=singlefile-win-x64
+```
+
+Fallback for machines without the C++ toolchain: the JIT runtime bundled into a self-extracting single exe. Bigger
+and slower to start, otherwise the same program.
+
+Things to know:
+
+- Every publish *property* sits in the `.pubxml`. A `PropertyGroup` in the csproj conditioned on `PublishAot` never
+  fires, because the profile is imported after the project body; items and targets with that condition do work.
+- With `NoDefaultCurrentDirectoryInExePath` set in the environment, Visual Studio 18's `VsDevCmd.bat` prints
+  `'vswhere.exe' is not recognized` during the publish. Harmless: the csproj target `HdgFixLinkerPathAfterVcVarsNoise`
+  repairs the linker path that this message would otherwise corrupt.
+- After an Avalonia upgrade, check that the SkiaSharp version it pulls in still matches `CoreUtils.SkiaSharp.Static`
+  (3.119.x today) and re-check the short `NoWarn` list in the AOT profile.
+
 ## Using it
 
 - Left-click a sector to make that folder the centre; click the centre disc (or **Up**) to go back up.

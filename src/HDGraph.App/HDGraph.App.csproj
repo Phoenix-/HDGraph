@@ -24,4 +24,53 @@
     <ProjectReference Include="..\HDGraph.Core\HDGraph.Core.csproj" />
     <ProjectReference Include="..\HDGraph.Geometry\HDGraph.Geometry.csproj" />
   </ItemGroup>
+
+  <!-- Native AOT publish (Properties/PublishProfiles/aot-win-x64.pubxml) links Skia, HarfBuzz and ANGLE into the exe
+       instead of shipping libSkiaSharp.dll, libHarfBuzzSharp.dll and av_libglesv2.dll next to it. The static
+       libraries come from community packages (github.com/andrewmd5/SkiaSharp.Static); keep the SkiaSharp major/minor
+       in step with the SkiaSharp version Avalonia pulls in (3.119.x today), the ANGLE revision is free-standing.
+       Avalonia.Win32 imports ANGLE as "av_libGLESv2.dll", SkiaSharp/HarfBuzzSharp as "libSkiaSharp"/"libHarfBuzzSharp";
+       DirectPInvoke turns those imports into link-time symbol references that the .lib files satisfy. -->
+  <ItemGroup Condition="'$(PublishAot)' == 'true'">
+    <PackageReference Include="CoreUtils.SkiaSharp.Static" Version="3.119.0.1" />
+    <PackageReference Include="CoreUtils.ANGLE.Static" Version="7151.0.1" />
+    <DirectPInvoke Include="libSkiaSharp" />
+    <DirectPInvoke Include="libHarfBuzzSharp" />
+    <DirectPInvoke Include="av_libGLESv2" />
+    <!-- Windows import libraries the static Skia/ANGLE objects depend on. -->
+    <LinkerArg Include="d3d9.lib;dxguid.lib;dxgi.lib;d3d12.lib;d3dcompiler.lib" />
+    <LinkerArg Include="gdi32.lib;user32.lib;ole32.lib;usp10.lib;fontsub.lib;synchronization.lib" />
+  </ItemGroup>
+
+  <!-- ILC finds link.exe by running its findvcvarsall.bat, which calls VsDevCmd.bat from the Visual Studio install and
+       captures stdout AND stderr into one property. VsDevCmd.bat (VS 18) runs "vswhere.exe" by bare name after a
+       pushd into the VS Installer folder; on a machine with NoDefaultCurrentDirectoryInExePath set that prints
+       "'vswhere.exe' is not recognized" to stderr, the line lands in front of the tools directory and the link step
+       dies with "syntax error in file name". Keep only the last ';'-separated segment, which is the real directory.
+       No-op on machines where the output is clean. Reported upstream? Not yet; see README. -->
+  <Target Name="HdgFixLinkerPathAfterVcVarsNoise" AfterTargets="SetupOSSpecificProps"
+          Condition="'$(PublishAot)' == 'true' And $(_CppToolsDirectory.Contains(';'))">
+    <PropertyGroup>
+      <_CppToolsDirectory>$(_CppToolsDirectory.Substring($([MSBuild]::Add($(_CppToolsDirectory.LastIndexOf(';')), 1))))</_CppToolsDirectory>
+      <CppLinker>$(_CppToolsDirectory)link.exe</CppLinker>
+      <CppLibCreator>$(_CppToolsDirectory)lib.exe</CppLibCreator>
+    </PropertyGroup>
+    <Message Importance="high" Text="HDGraph: cleaned the C++ tools directory reported by findvcvarsall.bat -> $(_CppToolsDirectory)" />
+  </Target>
+
+  <!-- Under AOT the publish list still carries files that only make sense for a JIT deployment: the three native
+       DLLs the static libraries replace (a stale DLL next to the exe could shadow the linked-in code), the .lib
+       inputs and native .pdb files that NuGet treats as "native assets" of the static packages, and the managed
+       .pdb files of project references (dotnet/sdk#40488). The exe and its own hdgraph.pdb are copied by ILC's
+       targets, not through this list, so after the cut the folder holds exactly those two files. -->
+  <Target Name="HdgDropStaticallyLinkedNatives" AfterTargets="ComputeResolvedFilesToPublishList" Condition="'$(PublishAot)' == 'true'">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+                             Condition="'%(ResolvedFileToPublish.Filename)%(ResolvedFileToPublish.Extension)' == 'libSkiaSharp.dll'
+                                     Or '%(ResolvedFileToPublish.Filename)%(ResolvedFileToPublish.Extension)' == 'libHarfBuzzSharp.dll'
+                                     Or '%(ResolvedFileToPublish.Filename)%(ResolvedFileToPublish.Extension)' == 'av_libglesv2.dll'
+                                     Or '%(ResolvedFileToPublish.Extension)' == '.lib'
+                                     Or '%(ResolvedFileToPublish.Extension)' == '.pdb'" />
+    </ItemGroup>
+  </Target>
 </Project>
