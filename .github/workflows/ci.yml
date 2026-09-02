@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - '.gitattributes'
+      - '.gitignore'
+  workflow_dispatch:
+
+# One lane per branch. A run in progress is never cancelled, at most one run waits behind it, and every newer push
+# replaces the waiting one (GitHub cancels the older pending run). The run that eventually starts checks out the newest
+# commit, so it covers everything that was pushed while it waited. No scheduled builds: nothing runs without a push.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: 1
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+jobs:
+  build:
+    name: Build, test, publish (win-x64)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.pubxml') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Build (Release, warnings are errors)
+        run: dotnet build HDGraphCore.slnx -c Release
+
+      - name: Test
+        run: dotnet test HDGraphCore.slnx -c Release --no-build --logger "console;verbosity=normal"
+
+      # Native AOT needs link.exe; the windows-latest image ships Visual Studio 2022 with the C++ workload.
+      - name: Publish (Native AOT single exe)
+        run: dotnet publish src/HDGraph.App -p:PublishProfile=aot-win-x64
+
+      - name: Upload hdgraph.exe
+        uses: actions/upload-artifact@v7
+        with:
+          name: hdgraph-win-x64
+          path: src/HDGraph.App/bin/publish/aot-win-x64/hdgraph.exe
+          retention-days: 14
+          if-no-files-found: error

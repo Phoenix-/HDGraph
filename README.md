@@ -1,6 +1,6 @@
 # HDGraph (rewrite)
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![CI](https://github.com/Phoenix-/HDGraph/actions/workflows/ci.yml/badge.svg)](https://github.com/Phoenix-/HDGraph/actions/workflows/ci.yml)
 
 A fresh, DPI-aware take on [HDGraph](https://www.hdgraph.com): where did the disk space go, drawn as
 concentric rings. Windows-first, built on .NET 10 and Avalonia with the FluentAvalonia theme, so it looks
@@ -58,6 +58,17 @@ Things to know:
   repairs the linker path that this message would otherwise corrupt.
 - After an Avalonia upgrade, check that the SkiaSharp version it pulls in still matches `CoreUtils.SkiaSharp.Static`
   (3.119.x today) and re-check the short `NoWarn` list in the AOT profile.
+
+## CI
+
+Every push runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on a GitHub-hosted Windows runner: Release
+build, tests, then the Native AOT publish. The resulting `hdgraph.exe` is attached to the run as the artifact
+`hdgraph-win-x64` (Actions tab, open the run, "Artifacts"; kept for 14 days).
+
+Runs are serialised per branch. A run in progress is never interrupted, at most one run waits behind it, and a newer
+push replaces the waiting one, so a burst of commits costs one extra build that covers all of them. Pushes that touch
+only Markdown, `LICENSE` or the git dot-files are skipped. There is no scheduled build; the workflow can also be started
+by hand from the Actions tab.
 
 ## Using it
 
