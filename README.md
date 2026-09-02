@@ -6,7 +6,8 @@
 </p>
 
 <p align="center">
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![CI](https://github.com/Phoenix-/HDGraph/actions/workflows/ci.yml/badge.svg)](https://github.com/Phoenix-/HDGraph/actions/workflows/ci.yml)
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="https://github.com/Phoenix-/HDGraph/actions/workflows/ci.yml"><img src="https://github.com/Phoenix-/HDGraph/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
 A fresh, DPI-aware take on [HDGraph](https://www.hdgraph.com): where did the disk space go, drawn as
