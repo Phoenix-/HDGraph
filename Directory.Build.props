@@ -7,6 +7,12 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AnalysisLevel>latest</AnalysisLevel>
     <Product>HDGraph</Product>
-    <VersionPrefix>0.1.0</VersionPrefix>
+
+    <!-- The version comes from git tags (vX.Y.Z) via MinVer; see README, "Versions and releases". -->
+    <MinVerTagPrefix>v</MinVerTagPrefix>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MinVer" Version="7.0.0" PrivateAssets="all" />
+  </ItemGroup>
 </Project>

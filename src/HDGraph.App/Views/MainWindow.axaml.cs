@@ -14,6 +14,7 @@ public partial class MainWindow : Window
     public MainWindow(string? startPath)
     {
         InitializeComponent();
+        Title = $"HDGraph {AppInfo.Version}";
         var viewModel = new MainWindowViewModel
         {
             PickFolderAsync = PickFolderAsync,

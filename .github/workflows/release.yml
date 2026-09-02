@@ -1,0 +1,78 @@
+name: Release
+
+# Pushing a tag vX.Y.Z builds that commit, checks the exe carries the tag's version and creates a DRAFT GitHub Release
+# with the exe and its SHA-256. Publishing the draft is a manual click, so notes can be reviewed first. A tag with a
+# pre-release suffix (v1.2.0-beta.1) is marked pre-release and never becomes "latest". See README, "Versions and releases".
+on:
+  push:
+    tags: ['v*']
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write # create the release, upload the assets
+
+env:
+  DOTNET_NOLOGO: 1
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+jobs:
+  release:
+    name: Build, test, publish, draft release (win-x64)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # MinVer derives the version from git tags; a shallow clone has none
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.pubxml') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Build (Release, warnings are errors)
+        run: dotnet build HDGraphCore.slnx -c Release
+
+      - name: Test
+        run: dotnet test HDGraphCore.slnx -c Release --no-build --logger "console;verbosity=normal"
+
+      - name: Publish (Native AOT single exe)
+        run: dotnet publish src/HDGraph.App -p:PublishProfile=aot-win-x64
+
+      - name: Check that the exe carries the tag's version
+        shell: pwsh
+        run: |
+          $expected = '${{ github.ref_name }}'.Substring(1)   # v0.1.0 -> 0.1.0
+          $info = (Get-Item src/HDGraph.App/bin/publish/aot-win-x64/hdgraph.exe).VersionInfo
+          "ProductVersion = $($info.ProductVersion), FileVersion = $($info.FileVersion)"
+          if (-not $info.ProductVersion.StartsWith($expected)) {
+            throw "The exe reports version '$($info.ProductVersion)', the tag says '$expected'."
+          }
+
+      - name: Stage the assets
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory dist | Out-Null
+          Copy-Item src/HDGraph.App/bin/publish/aot-win-x64/hdgraph.exe dist/hdgraph-win-x64.exe
+          $hash = (Get-FileHash dist/hdgraph-win-x64.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          Set-Content -NoNewline dist/hdgraph-win-x64.exe.sha256 "$hash *hdgraph-win-x64.exe"
+          Get-ChildItem dist | Format-Table Name, Length
+
+      - name: Create the draft release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = '${{ github.ref_name }}'
+          $flags = @('--draft', '--generate-notes', '--verify-tag', '--title', "HDGraph $tag")
+          if ($tag -match '-') { $flags += '--prerelease' }
+          gh release create $tag dist/hdgraph-win-x64.exe dist/hdgraph-win-x64.exe.sha256 @flags

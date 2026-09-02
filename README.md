@@ -70,6 +70,27 @@ push replaces the waiting one, so a burst of commits costs one extra build that 
 only Markdown, `LICENSE` or the git dot-files are skipped. There is no scheduled build; the workflow can also be started
 by hand from the Actions tab.
 
+## Versions and releases
+
+The version comes from git tags through [MinVer](https://github.com/adamralph/minver); nothing in the tree is edited
+to bump it. A tag `vX.Y.Z` makes that commit build as `X.Y.Z`. Every later commit builds as `X.Y.(Z+1)-alpha.0.N`,
+N being the number of commits since the tag, so a CI artifact always says how far past the last release it is. The
+window title shows this version; the exe properties also carry the commit hash. Semver as usual: MAJOR for breaking
+changes, MINOR for features, PATCH for fixes; before 1.0 the rules are relaxed.
+
+To cut a release, tag and push the tag:
+
+```
+git tag -a v0.2.0 -m "HDGraph 0.2.0"
+git push origin v0.2.0
+```
+
+[`.github/workflows/release.yml`](.github/workflows/release.yml) builds that commit, runs the tests, publishes the AOT
+exe, checks that the exe reports the tag's version, and creates a **draft** GitHub Release with `hdgraph-win-x64.exe`,
+its SHA-256 and generated notes. Read the notes, edit if needed, press Publish. From then on
+<https://github.com/Phoenix-/HDGraph/releases/latest/download/hdgraph-win-x64.exe> points at that build. A tag with a
+pre-release suffix (`v0.2.0-beta.1`) is marked pre-release and never becomes `latest`.
+
 ## Using it
 
 - Left-click a sector to make that folder the centre; click the centre disc (or **Up**) to go back up.
