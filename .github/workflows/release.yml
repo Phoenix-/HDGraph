@@ -64,7 +64,8 @@ jobs:
           New-Item -ItemType Directory dist | Out-Null
           Copy-Item src/HDGraph.App/bin/publish/aot-win-x64/hdgraph.exe dist/hdgraph-win-x64.exe
           $hash = (Get-FileHash dist/hdgraph-win-x64.exe -Algorithm SHA256).Hash.ToLowerInvariant()
-          Set-Content -NoNewline dist/hdgraph-win-x64.exe.sha256 "$hash *hdgraph-win-x64.exe"
+          # sha256sum -c format. Not Set-Content: its -NoNewline is a provider-specific parameter and the runner rejected it.
+          [IO.File]::WriteAllText("$PWD/dist/hdgraph-win-x64.exe.sha256", "$hash *hdgraph-win-x64.exe`n")
           Get-ChildItem dist | Format-Table Name, Length
 
       - name: Create the draft release
