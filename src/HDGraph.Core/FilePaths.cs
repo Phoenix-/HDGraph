@@ -19,11 +19,14 @@ public static class FilePaths
     public static bool IsRoot(string fullPath) =>
         string.Equals(Path.GetPathRoot(fullPath), fullPath, Comparison);
 
-    /// <summary>What a node for this path is called: the last segment, or the root itself.</summary>
+    /// <summary>What a node for this path is called: the last segment; for a drive root the drive without its
+    /// separator ("C:", as Explorer shows it); for a root that is nothing but a separator ("/") the root itself.</summary>
     public static string DisplayName(string fullPath)
     {
         var name = Path.GetFileName(fullPath);
-        return string.IsNullOrEmpty(name) ? fullPath : name;
+        if (!string.IsNullOrEmpty(name)) return name;
+        var trimmed = fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return trimmed.Length == 0 ? fullPath : trimmed;
     }
 
     public static bool PathsEqual(string a, string b) => string.Equals(a, b, Comparison);

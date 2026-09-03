@@ -390,7 +390,7 @@ public partial class MainWindowViewModel : ObservableObject
             : root.FindByPath(previousView.FullPath) ?? root;
         OnTreeChanged();
 
-        var summary = $"{root.Name}: {SizeFormatter.Format(root.TotalSize)} in {root.TotalFileCount:N0} files, {root.TotalDirectoryCount:N0} folders ({result.Elapsed.TotalSeconds:0.0} s)";
+        var summary = $"Scanned {root.FullPath} in {result.Elapsed.TotalSeconds:0.0} s: {SizeFormatter.Format(root.TotalSize)}, {root.TotalFileCount:N0} files, {root.TotalDirectoryCount:N0} folders";
         StatusText = ErrorCount == 0 ? summary : $"{summary}; {ErrorCount:N0} folders could not be read";
     }
 

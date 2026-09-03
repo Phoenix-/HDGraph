@@ -51,9 +51,11 @@ public sealed class FilePathsTests
     }
 
     [Fact]
-    public void DisplayNameIsTheLastSegmentOrTheRoot()
+    public void DisplayNameIsTheLastSegmentOrTheDriveWithoutItsSeparator()
     {
-        Assert.Equal(Root, FilePaths.DisplayName(Root));
+        // "C:\" shows as "C:"; a bare "/" has nothing left after trimming and stays "/".
+        var expectedRoot = Root.TrimEnd(Sep, Path.AltDirectorySeparatorChar);
+        Assert.Equal(expectedRoot.Length == 0 ? Root : expectedRoot, FilePaths.DisplayName(Root));
         Assert.Equal("b", FilePaths.DisplayName(Path.Combine(Root, "a", "b")));
     }
 }
