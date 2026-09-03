@@ -36,7 +36,7 @@ dotnet test HDGraphCore.slnx
 dotnet run --project src/HDGraph.App -- "C:\Program Files"
 ```
 
-Passing a path scans it on start; without one, pick a folder or click a drive button.
+Passing a path scans it on start; without one, type a path, pick a folder or click a drive button.
 
 ## Publishing
 
@@ -106,7 +106,16 @@ version from the window title (or the exe properties), fetch the zip from that r
 
 ## Using it
 
-- Left-click a sector to make that folder the centre; click the centre disc (or **Up**) to go back up.
+- The path bar shows where the centre of the chart is, Explorer-style: `C:\ > Program Files > Common Files`. Solid
+  segments are in the scanned tree and centre the chart at once. Dimmed segments are above it: clicking one extends the
+  scan up to there, reading only what is not known yet. The scan grows upward, so there is no root to set.
+- Click the empty part of the path bar to type a path (Enter goes there, Esc cancels). A path inside the tree just
+  moves the centre, a parent extends the scan, anything else starts a new scan.
+- While a scan runs, the chart shows the folder being read: what is already known, a striped "Scanning…" slice that
+  grows as bytes come in, and the drive's free space. The known part stays clickable; the scan finishes in the
+  background and the chart stays where you are.
+- Left-click a sector to make that folder the centre; click the centre disc (or **Up**, Alt+Up) to go back up, past
+  the scanned root if need be. **Rescan** reads the scanned tree again.
 - Hover a sector for size, share and file counts in the right pane.
 - Right-click a sector: open in Explorer, copy path, rescan from there.
 - Rings and rotation sliders change the view without rescanning.
