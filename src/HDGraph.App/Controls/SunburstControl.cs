@@ -62,8 +62,8 @@ public sealed class SunburstControl : Control
     static SunburstControl()
     {
         AffectsRender<SunburstControl>(RootProperty, RingsProperty, RotationProperty, ShowSizesProperty, HoveredNodeProperty);
-        RootProperty.Changed.AddClassHandler<SunburstControl>(static (c, _) => c.InvalidateLayoutCache());
-        RingsProperty.Changed.AddClassHandler<SunburstControl>(static (c, _) => c.InvalidateLayoutCache());
+        RootProperty.Changed.AddClassHandler<SunburstControl>(static (c, _) => c.RebuildLayout());
+        RingsProperty.Changed.AddClassHandler<SunburstControl>(static (c, _) => c.RebuildLayout());
     }
 
     public SunburstControl()
@@ -129,23 +129,30 @@ public sealed class SunburstControl : Control
 
     private double ChartRadius => Math.Max(0, Math.Min(Bounds.Width, Bounds.Height) / 2 - Padding);
 
-    private void InvalidateLayoutCache()
+    /// <summary>Lays out the current root anew and re-derives what is under the pointer, so a tree that
+    /// changes under a still pointer (a scan that grows while the user looks at it) keeps the hover
+    /// consistent without a flicker to nothing. Runs when the root, the ring count or the size changes,
+    /// always outside the render pass: a change of <see cref="HoveredNode"/> invalidates this visual (and,
+    /// through its binding, the details pane), which Avalonia forbids while it renders.</summary>
+    private void RebuildLayout()
     {
         _layout = null;
         _geometries = [];
+        BuildLayout();
+        RefreshHover();
     }
 
-    /// <summary>Lays out the current root if the cached layout is for another root or size. A new layout
-    /// re-derives what is under the pointer, so a tree that changes under a still pointer (a scan that
-    /// grows while the user looks at it) keeps the hover consistent without a flicker to nothing.</summary>
-    private SunburstLayout? EnsureLayout()
+    private void RefreshHover() => SetHover(_lastPointer is { } pointer ? HitTest(pointer) : null);
+
+    /// <summary>The layout for the current root and size, built unless the cached one still fits. Changes
+    /// no property, so it is safe to call from <see cref="Render"/>.</summary>
+    private SunburstLayout? BuildLayout()
     {
         var root = Root;
         if (root is null)
         {
             _layout = null;
             _geometries = [];
-            SetHover(null);
             AnimateStripes(false);
             return null;
         }
@@ -164,8 +171,19 @@ public sealed class SunburstControl : Control
         }
 
         AnimateStripes(_hasScanningSlice);
-        SetHover(_lastPointer is { } pointer ? HitTest(pointer) : null);
         return _layout;
+    }
+
+    /// <summary>What <see cref="Render"/> draws. Normally the cache is current, since every change that
+    /// invalidates it goes through <see cref="RebuildLayout"/>; should it not be, the geometry is built here
+    /// and the hover, which must not change during the render pass, catches up right after it.</summary>
+    private SunburstLayout? EnsureLayoutForRender()
+    {
+        var cached = _layout;
+        var layout = BuildLayout();
+        if (!ReferenceEquals(layout, cached))
+            Dispatcher.UIThread.Post(RefreshHover, DispatcherPriority.Input);
+        return layout;
     }
 
     private void AnimateStripes(bool on)
@@ -184,7 +202,7 @@ public sealed class SunburstControl : Control
     public override void Render(DrawingContext context)
     {
         base.Render(context);
-        var layout = EnsureLayout();
+        var layout = EnsureLayoutForRender();
         var dark = ActualThemeVariant == ThemeVariant.Dark;
 
         if (layout is null || layout.Radius <= 0)
@@ -396,6 +414,7 @@ public sealed class SunburstControl : Control
     protected override void OnSizeChanged(SizeChangedEventArgs e)
     {
         base.OnSizeChanged(e);
+        RebuildLayout();
         InvalidateVisual();
     }
 
