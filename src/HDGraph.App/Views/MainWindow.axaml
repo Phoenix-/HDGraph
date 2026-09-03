@@ -1,5 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="using:FluentAvalonia.UI.Controls"
         xmlns:vm="using:HDGraph.App.ViewModels"
         xmlns:controls="using:HDGraph.App.Controls"
         x:Class="HDGraph.App.Views.MainWindow"
@@ -14,25 +15,52 @@
         <vm:MainWindowViewModel />
     </Design.DataContext>
 
+    <Window.KeyBindings>
+        <KeyBinding Gesture="Alt+Up" Command="{Binding GoUpCommand}" />
+    </Window.KeyBindings>
+
     <Window.Resources>
         <SolidColorBrush x:Key="CardBackground" Color="#B3FFFFFF" />
         <SolidColorBrush x:Key="CardBorder" Color="#1A000000" />
     </Window.Resources>
 
+    <Window.Styles>
+        <!-- Segments above the scanned tree are dimmed; the tooltip says what a click does. -->
+        <Style Selector="ui|FABreadcrumbBarItem" x:DataType="vm:PathCrumb">
+            <Setter Property="Opacity" Value="{Binding Opacity}" />
+            <Setter Property="ToolTip.Tip" Value="{Binding Tooltip}" />
+        </Style>
+    </Window.Styles>
+
     <Grid RowDefinitions="Auto,*,Auto" Margin="16" RowSpacing="12">
 
-        <!-- Toolbar: path, browse, scan/cancel, drive shortcuts -->
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
-            <TextBox Grid.Column="0"
-                     Text="{Binding PathText}"
-                     PlaceholderText="Folder or drive to scan"
-                     IsEnabled="{Binding !IsScanning}" />
-            <Button Grid.Column="1" Content="Browse…" Command="{Binding BrowseCommand}" IsEnabled="{Binding !IsScanning}" />
-            <Button Grid.Column="2" Content="Scan" Classes="accent" MinWidth="90"
-                    Command="{Binding ScanCommand}" IsVisible="{Binding !IsScanning}" IsDefault="True" />
-            <Button Grid.Column="2" Content="Cancel" MinWidth="90"
-                    Command="{Binding ScanCancelCommand}" IsVisible="{Binding IsScanning}" />
-            <ItemsControl Grid.Column="3" ItemsSource="{Binding Drives}" Margin="8,0,0,0">
+        <!-- Toolbar: up, path bar (segments or editor), browse, rescan/cancel, drive shortcuts -->
+        <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="8">
+            <Button Grid.Column="0" Command="{Binding GoUpCommand}" ToolTip.Tip="Up (Alt+Up)" Padding="10,6">
+                <ui:FASymbolIcon Symbol="Up" />
+            </Button>
+
+            <Panel Grid.Column="1">
+                <!-- Segments: click one to go there, click the empty space to type a path. -->
+                <Border x:Name="CrumbsHost"
+                        Background="{StaticResource CardBackground}" BorderBrush="{StaticResource CardBorder}"
+                        BorderThickness="1" CornerRadius="4" MinHeight="32" Padding="6,0"
+                        IsVisible="{Binding !IsEditingPath}" Cursor="IBeam">
+                    <!-- Items show their data as text (PathCrumb.ToString is the label); state is styled below. -->
+                    <ui:FABreadcrumbBar x:Name="Crumbs" ItemsSource="{Binding Crumbs}" VerticalAlignment="Center" />
+                </Border>
+                <TextBox x:Name="PathEditor"
+                         Text="{Binding PathText}"
+                         PlaceholderText="Folder or drive to scan"
+                         IsVisible="{Binding IsEditingPath}" />
+            </Panel>
+
+            <Button Grid.Column="2" Content="Browse…" Command="{Binding BrowseCommand}" />
+            <Button Grid.Column="3" Content="Rescan" MinWidth="90"
+                    Command="{Binding RescanCommand}" IsVisible="{Binding !IsScanning}" ToolTip.Tip="Read the scanned folder again" />
+            <Button Grid.Column="3" Content="Cancel" MinWidth="90"
+                    Command="{Binding CancelScanCommand}" IsVisible="{Binding IsScanning}" />
+            <ItemsControl Grid.Column="4" ItemsSource="{Binding Drives}" Margin="8,0,0,0">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                         <StackPanel Orientation="Horizontal" Spacing="6" />
@@ -54,33 +82,25 @@
 
             <Border Grid.Column="0" Background="{StaticResource CardBackground}" BorderBrush="{StaticResource CardBorder}"
                     BorderThickness="1" CornerRadius="8" Padding="12">
-                <Grid RowDefinitions="Auto,*" RowSpacing="8">
-                    <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,*" ColumnSpacing="8">
-                        <Button Grid.Column="0" Content="Up" Command="{Binding GoUpCommand}" ToolTip.Tip="Centre on the parent folder" />
-                        <Button Grid.Column="1" Content="Home" Command="{Binding GoHomeCommand}" ToolTip.Tip="Centre on the scanned folder" />
-                        <SelectableTextBlock Grid.Column="2" Text="{Binding ViewRootPath}" VerticalAlignment="Center"
-                                             TextTrimming="CharacterEllipsis" Opacity="0.8" />
-                    </Grid>
-                    <controls:SunburstControl Grid.Row="1"
-                                              x:Name="Chart"
-                                              Root="{Binding ViewRoot}"
-                                              Rings="{Binding Rings}"
-                                              Rotation="{Binding Rotation}"
-                                              ShowSizes="{Binding ShowSizes}"
-                                              HoveredNode="{Binding HoveredNode, Mode=OneWayToSource}"
-                                              ContextNode="{Binding ContextNode, Mode=OneWayToSource}"
-                                              ActivateCommand="{Binding NavigateToCommand}">
-                        <controls:SunburstControl.ContextFlyout>
-                            <MenuFlyout>
-                                <MenuItem Header="Centre on this folder" Command="{Binding NavigateToCommand}" CommandParameter="{Binding ContextNode}" />
-                                <MenuItem Header="Rescan from here" Command="{Binding RescanCommand}" CommandParameter="{Binding ContextNode}" />
-                                <Separator />
-                                <MenuItem Header="Open in Explorer" Command="{Binding OpenInExplorerCommand}" CommandParameter="{Binding ContextNode}" />
-                                <MenuItem Header="Copy path" Command="{Binding CopyPathCommand}" CommandParameter="{Binding ContextNode}" />
-                            </MenuFlyout>
-                        </controls:SunburstControl.ContextFlyout>
-                    </controls:SunburstControl>
-                </Grid>
+                <controls:SunburstControl x:Name="Chart"
+                                          Root="{Binding ViewRoot}"
+                                          Rings="{Binding Rings}"
+                                          Rotation="{Binding Rotation}"
+                                          ShowSizes="{Binding ShowSizes}"
+                                          HoveredNode="{Binding HoveredNode, Mode=OneWayToSource}"
+                                          ContextNode="{Binding ContextNode, Mode=OneWayToSource}"
+                                          ActivateCommand="{Binding NavigateToCommand}"
+                                          UpCommand="{Binding GoUpCommand}">
+                    <controls:SunburstControl.ContextFlyout>
+                        <MenuFlyout>
+                            <MenuItem Header="Centre on this folder" Command="{Binding NavigateToCommand}" CommandParameter="{Binding ContextNode}" />
+                            <MenuItem Header="Rescan from here" Command="{Binding RescanFromCommand}" CommandParameter="{Binding ContextNode}" />
+                            <Separator />
+                            <MenuItem Header="Open in Explorer" Command="{Binding OpenInExplorerCommand}" CommandParameter="{Binding ContextNode}" />
+                            <MenuItem Header="Copy path" Command="{Binding CopyPathCommand}" CommandParameter="{Binding ContextNode}" />
+                        </MenuFlyout>
+                    </controls:SunburstControl.ContextFlyout>
+                </controls:SunburstControl>
             </Border>
 
             <Border Grid.Column="1" Background="{StaticResource CardBackground}" BorderBrush="{StaticResource CardBorder}"

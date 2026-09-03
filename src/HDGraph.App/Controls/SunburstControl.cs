@@ -36,9 +36,14 @@ public sealed class SunburstControl : Control
     public static readonly StyledProperty<DirectoryNode?> ContextNodeProperty =
         AvaloniaProperty.Register<SunburstControl, DirectoryNode?>(nameof(ContextNode), defaultBindingMode: BindingMode.OneWayToSource);
 
-    /// <summary>Executed with the clicked directory; clicking the centre passes the centre's parent.</summary>
+    /// <summary>Executed with the clicked directory of a ring.</summary>
     public static readonly StyledProperty<ICommand?> ActivateCommandProperty =
         AvaloniaProperty.Register<SunburstControl, ICommand?>(nameof(ActivateCommand));
+
+    /// <summary>Executed without a parameter when the centre disc is clicked. Without it the centre click
+    /// falls back to <see cref="ActivateCommand"/> with the centre's parent.</summary>
+    public static readonly StyledProperty<ICommand?> UpCommandProperty =
+        AvaloniaProperty.Register<SunburstControl, ICommand?>(nameof(UpCommand));
 
     private const double Padding = 8;
     private const double LabelFontSize = 12;
@@ -98,6 +103,12 @@ public sealed class SunburstControl : Control
     {
         get => GetValue(ActivateCommandProperty);
         set => SetValue(ActivateCommandProperty, value);
+    }
+
+    public ICommand? UpCommand
+    {
+        get => GetValue(UpCommandProperty);
+        set => SetValue(UpCommandProperty, value);
     }
 
     private Point Center => new(Bounds.Width / 2, Bounds.Height / 2);
@@ -294,6 +305,16 @@ public sealed class SunburstControl : Control
         }
 
         if (!properties.IsLeftButtonPressed || _layout is null || node is null) return;
+
+        if (ReferenceEquals(node, _layout.Root) && UpCommand is { } up)
+        {
+            if (up.CanExecute(null))
+            {
+                up.Execute(null);
+                e.Handled = true;
+            }
+            return;
+        }
 
         var target = ReferenceEquals(node, _layout.Root) ? node.Parent : node;
         if (target is not { Kind: NodeKind.Directory }) return;

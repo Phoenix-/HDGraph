@@ -26,6 +26,8 @@ public static class FilePaths
         return string.IsNullOrEmpty(name) ? fullPath : name;
     }
 
+    public static bool PathsEqual(string a, string b) => string.Equals(a, b, Comparison);
+
     /// <summary>Parent of a normalized path, or null at a root.</summary>
     public static string? GetParent(string fullPath) => Path.GetDirectoryName(fullPath);
 
