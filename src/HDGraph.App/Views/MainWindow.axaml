@@ -22,6 +22,14 @@
     <Window.Resources>
         <SolidColorBrush x:Key="CardBackground" Color="#B3FFFFFF" />
         <SolidColorBrush x:Key="CardBorder" Color="#1A000000" />
+        <!-- Vertical alignment of the path bar with the toolbar buttons (checked pixel-exact at 125 %).
+             FluentAvalonia gives breadcrumb items a fixed 20 px line box plus symmetric 3 px padding, which sits
+             their text ~2 px below the labels of the Fluent buttons next to them (those pad 5 top / 6 bottom).
+             Natural line height + 1/4 padding puts crumbs, chevrons and button labels on one baseline; the
+             ellipsis glyph gets that shift back so "…" stays centred on the chevrons. -->
+        <x:Double x:Key="EllipsisItemPresenterLineHeight">NaN</x:Double>
+        <Thickness x:Key="EllipsisItemButtonPadding">1,1,1,4</Thickness>
+        <Thickness x:Key="EllipsisTextBlockPadding">3,5,3,1</Thickness>
     </Window.Resources>
 
     <Window.Styles>
