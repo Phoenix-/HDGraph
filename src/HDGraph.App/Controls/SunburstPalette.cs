@@ -23,6 +23,20 @@ internal static class SunburstPalette
         return FromHsl(hue, saturation, lightness);
     }
 
+    /// <summary>The two stripe colours of the slice that stands for what a running scan has found so far:
+    /// a muted blue-grey, so it reads as "not data yet" next to the coloured sectors.</summary>
+    public static (Color A, Color B) ScanningStripes(bool dark, bool hovered)
+    {
+        var (a, b) = dark ? (0.30, 0.37) : (0.86, 0.79);
+        if (hovered)
+        {
+            var shift = dark ? 0.1 : -0.1;
+            (a, b) = (a + shift, b + shift);
+        }
+
+        return (FromHsl(210, 0.14, a), FromHsl(210, 0.14, b));
+    }
+
     public static Color CenterFill(bool dark) => dark ? Color.FromRgb(0x3A, 0x3A, 0x3A) : Color.FromRgb(0xE8, 0xE8, 0xE8);
 
     public static Color Separator(bool dark) => dark ? Color.FromRgb(0x1C, 0x1C, 0x1C) : Colors.White;

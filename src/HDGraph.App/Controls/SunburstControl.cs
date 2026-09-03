@@ -7,6 +7,7 @@ using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Styling;
+using Avalonia.Threading;
 using HDGraph.Core;
 using HDGraph.Geometry;
 
@@ -48,8 +49,15 @@ public sealed class SunburstControl : Control
     private const double Padding = 8;
     private const double LabelFontSize = 12;
 
+    /// <summary>Distance the stripes of a scanning slice travel between frames, as a fraction of their period.</summary>
+    private const double StripeStep = 0.025;
+
+    private readonly DispatcherTimer _stripeTimer;
     private SunburstLayout? _layout;
     private Avalonia.Media.Geometry[] _geometries = [];
+    private bool _hasScanningSlice;
+    private double _stripePhase;
+    private Point? _lastPointer;
 
     static SunburstControl()
     {
@@ -61,6 +69,12 @@ public sealed class SunburstControl : Control
     public SunburstControl()
     {
         ClipToBounds = true;
+        _stripeTimer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(40) };
+        _stripeTimer.Tick += (_, _) =>
+        {
+            _stripePhase = (_stripePhase + StripeStep) % 1;
+            InvalidateVisual();
+        };
     }
 
     public DirectoryNode? Root
@@ -119,13 +133,22 @@ public sealed class SunburstControl : Control
     {
         _layout = null;
         _geometries = [];
-        SetCurrentValue(HoveredNodeProperty, null);
     }
 
+    /// <summary>Lays out the current root if the cached layout is for another root or size. A new layout
+    /// re-derives what is under the pointer, so a tree that changes under a still pointer (a scan that
+    /// grows while the user looks at it) keeps the hover consistent without a flicker to nothing.</summary>
     private SunburstLayout? EnsureLayout()
     {
         var root = Root;
-        if (root is null) return null;
+        if (root is null)
+        {
+            _layout = null;
+            _geometries = [];
+            SetHover(null);
+            AnimateStripes(false);
+            return null;
+        }
 
         var radius = ChartRadius;
         if (_layout is not null && ReferenceEquals(_layout.Root, root) && Math.Abs(_layout.Radius - radius) < 0.01)
@@ -133,9 +156,29 @@ public sealed class SunburstControl : Control
 
         _layout = SunburstLayout.Build(root, radius, new SunburstLayoutOptions { Rings = Math.Max(1, Rings) });
         _geometries = new Avalonia.Media.Geometry[_layout.Arcs.Count];
+        _hasScanningSlice = false;
         for (var i = 0; i < _geometries.Length; i++)
+        {
             _geometries[i] = BuildArcGeometry(_layout.Arcs[i]);
+            _hasScanningSlice |= _layout.Arcs[i].Node.Kind == NodeKind.Scanning;
+        }
+
+        AnimateStripes(_hasScanningSlice);
+        SetHover(_lastPointer is { } pointer ? HitTest(pointer) : null);
         return _layout;
+    }
+
+    private void AnimateStripes(bool on)
+    {
+        if (on == _stripeTimer.IsEnabled) return;
+        if (on) _stripeTimer.Start();
+        else _stripeTimer.Stop();
+    }
+
+    private void SetHover(DirectoryNode? node)
+    {
+        if (!ReferenceEquals(node, HoveredNode))
+            SetCurrentValue(HoveredNodeProperty, node);
     }
 
     public override void Render(DrawingContext context)
@@ -163,7 +206,9 @@ public sealed class SunburstControl : Control
             {
                 var arc = arcs[i];
                 var isHovered = hovered is not null && ReferenceEquals(arc.Node, hovered);
-                var fill = new SolidColorBrush(SunburstPalette.Fill(arc, dark, isHovered));
+                IBrush fill = arc.Node.Kind == NodeKind.Scanning
+                    ? StripeBrush(SunburstPalette.ScanningStripes(dark, isHovered), _stripePhase)
+                    : new SolidColorBrush(SunburstPalette.Fill(arc, dark, isHovered));
                 // A hairline sector is thinner than its own outline; outlining it would paint it white.
                 var outline = arc.MidArcLength < 2 ? null : separator;
                 context.DrawGeometry(fill, outline, _geometries[i]);
@@ -177,6 +222,27 @@ public sealed class SunburstControl : Control
         }
 
         DrawLabels(context, layout, center, dark);
+    }
+
+    /// <summary>Diagonal stripes that march as <paramref name="phase"/> advances: the "still working" look of
+    /// the slice a running scan fills in. Absolute units keep the stripe width the same in every sector.</summary>
+    private static LinearGradientBrush StripeBrush((Color A, Color B) colors, double phase)
+    {
+        const double period = 9;
+        var offset = phase * period * 2;
+        return new LinearGradientBrush
+        {
+            StartPoint = new RelativePoint(offset, 0, RelativeUnit.Absolute),
+            EndPoint = new RelativePoint(offset + period, period, RelativeUnit.Absolute),
+            SpreadMethod = GradientSpreadMethod.Repeat,
+            GradientStops =
+            {
+                new GradientStop(colors.A, 0),
+                new GradientStop(colors.A, 0.5),
+                new GradientStop(colors.B, 0.5),
+                new GradientStop(colors.B, 1),
+            },
+        };
     }
 
     private void DrawLabels(DrawingContext context, SunburstLayout layout, Point center, bool dark)
@@ -279,16 +345,18 @@ public sealed class SunburstControl : Control
     protected override void OnPointerMoved(PointerEventArgs e)
     {
         base.OnPointerMoved(e);
-        var node = HitTest(e.GetPosition(this));
-        if (!ReferenceEquals(node, HoveredNode))
-            SetCurrentValue(HoveredNodeProperty, node);
+        var position = e.GetPosition(this);
+        _lastPointer = position;
+        var node = HitTest(position);
+        SetHover(node);
         Cursor = node is { Kind: NodeKind.Directory } ? new Cursor(StandardCursorType.Hand) : Cursor.Default;
     }
 
     protected override void OnPointerExited(PointerEventArgs e)
     {
         base.OnPointerExited(e);
-        SetCurrentValue(HoveredNodeProperty, null);
+        _lastPointer = null;
+        SetHover(null);
         Cursor = Cursor.Default;
     }
 
@@ -329,5 +397,11 @@ public sealed class SunburstControl : Control
     {
         base.OnSizeChanged(e);
         InvalidateVisual();
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        AnimateStripes(false);
     }
 }
