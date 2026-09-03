@@ -16,31 +16,55 @@ public sealed class FileSystemScanner
         _options = options ?? new ScanOptions();
     }
 
-    public Task<ScanResult> ScanAsync(string path, IProgress<ScanProgress>? progress = null, CancellationToken cancellationToken = default)
+    /// <summary>Scans <paramref name="path"/>. Given a <paramref name="graft"/>, an already scanned tree whose
+    /// root lies under the path, the scan attaches that tree where it reaches it instead of reading those
+    /// directories again, and on success makes the new node its parent. That is how a scan grows upward:
+    /// extending "C:\Program Files" to "C:\" reads only the rest of the drive. The graft is not touched
+    /// before the scan completes, and never on failure or cancellation. It stays detached (its parent
+    /// null) when the directory is no longer there.</summary>
+    public Task<ScanResult> ScanAsync(
+        string path,
+        IProgress<ScanProgress>? progress = null,
+        CancellationToken cancellationToken = default,
+        DirectoryNode? graft = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        return Task.Run(() => Scan(path, progress, cancellationToken), cancellationToken);
+        if (graft?.Parent is not null)
+            throw new ArgumentException("The graft must be the root of its tree.", nameof(graft));
+        return Task.Run(() => Scan(path, progress, cancellationToken, graft), cancellationToken);
     }
 
-    private ScanResult Scan(string path, IProgress<ScanProgress>? progress, CancellationToken cancellationToken)
+    /// <summary>Available free space of the drive holding <paramref name="driveRoot"/>, or 0 when it cannot be read.</summary>
+    public static long FreeSpaceOf(string driveRoot)
     {
-        var fullPath = Path.GetFullPath(path);
-        var pathRoot = Path.GetPathRoot(fullPath);
-        var isDriveRoot = string.Equals(pathRoot, fullPath, StringComparison.OrdinalIgnoreCase);
-        if (!isDriveRoot)
-            fullPath = Path.TrimEndingDirectorySeparator(fullPath);
+        try
+        {
+            return Math.Max(0, new DriveInfo(driveRoot).AvailableFreeSpace);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return 0;
+        }
+    }
+
+    private ScanResult Scan(string path, IProgress<ScanProgress>? progress, CancellationToken cancellationToken, DirectoryNode? graft)
+    {
+        var fullPath = FilePaths.Normalize(path);
+        if (graft is not null && !FilePaths.IsStrictAncestor(fullPath, graft.FullPath))
+            throw new ArgumentException($"{graft.FullPath} does not lie under {fullPath}.", nameof(graft));
         if (!Directory.Exists(fullPath))
             throw new DirectoryNotFoundException($"Directory not found: {fullPath}");
 
-        var displayName = isDriveRoot ? fullPath : Path.GetFileName(fullPath);
-        if (string.IsNullOrEmpty(displayName)) displayName = fullPath;
-
-        var root = new DirectoryNode(displayName, fullPath, parent: null);
-        var run = new ScanRun(_options, progress, cancellationToken);
+        var root = new DirectoryNode(FilePaths.DisplayName(fullPath), fullPath, parent: null);
+        var run = new ScanRun(_options, progress, cancellationToken, graft);
         run.ScanDirectory(root, depth: 0);
 
-        if (isDriveRoot && _options.IncludeFreeSpace)
+        if (FilePaths.IsRoot(fullPath) && _options.IncludeFreeSpace)
             AppendFreeSpace(root, fullPath);
+
+        // Only now, with the whole tree built: whoever displays the graft keeps seeing a root until then.
+        if (graft is not null && run.GraftParent is { } graftParent)
+            graft.Parent = graftParent;
 
         run.ReportFinal();
         return new ScanResult(root, run.Elapsed, run.ErrorCount, run.Errors);
@@ -48,16 +72,7 @@ public sealed class FileSystemScanner
 
     private static void AppendFreeSpace(DirectoryNode root, string driveRoot)
     {
-        long free;
-        try
-        {
-            free = new DriveInfo(driveRoot).AvailableFreeSpace;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
-        {
-            return;
-        }
-
+        var free = FreeSpaceOf(driveRoot);
         if (free <= 0) return;
         var node = new DirectoryNode("Free space", driveRoot, root, NodeKind.FreeSpace) { TotalSize = free };
         var children = new List<DirectoryNode>(root.Children.Count + 1);
@@ -73,9 +88,11 @@ public sealed class FileSystemScanner
         private readonly ScanOptions _options;
         private readonly IProgress<ScanProgress>? _progress;
         private readonly CancellationToken _cancellationToken;
+        private readonly DirectoryNode? _graft;
         private readonly Stopwatch _stopwatch = Stopwatch.StartNew();
         private readonly ConcurrentQueue<ScanError> _errors = new();
         private readonly long _progressIntervalTicks;
+        private DirectoryNode? _graftParent;
         private long _directories;
         private long _files;
         private long _bytes;
@@ -83,11 +100,12 @@ public sealed class FileSystemScanner
         private long _lastReportTicks;
         private string? _currentPath;
 
-        public ScanRun(ScanOptions options, IProgress<ScanProgress>? progress, CancellationToken cancellationToken)
+        public ScanRun(ScanOptions options, IProgress<ScanProgress>? progress, CancellationToken cancellationToken, DirectoryNode? graft)
         {
             _options = options;
             _progress = progress;
             _cancellationToken = cancellationToken;
+            _graft = graft;
             _progressIntervalTicks = (long)(options.ProgressInterval.TotalSeconds * Stopwatch.Frequency);
         }
 
@@ -95,12 +113,16 @@ public sealed class FileSystemScanner
         public int ErrorCount => _errorCount;
         public IReadOnlyList<ScanError> Errors => _errors.ToArray();
 
+        /// <summary>The node the graft was attached under, once the scan has passed it.</summary>
+        public DirectoryNode? GraftParent => _graftParent;
+
         public void ScanDirectory(DirectoryNode node, int depth)
         {
             _cancellationToken.ThrowIfCancellationRequested();
             Volatile.Write(ref _currentPath, node.FullPath);
 
             var subdirectories = new List<DirectoryNode>();
+            var grafted = false;
             long filesSize = 0;
             var fileCount = 0;
 
@@ -111,8 +133,18 @@ public sealed class FileSystemScanner
                 {
                     if (entry.IsDirectory)
                     {
+                        var childPath = Path.Join(node.FullPath, entry.Name);
+                        if (_graft is { } graft && string.Equals(childPath, graft.FullPath, FilePaths.Comparison))
+                        {
+                            // Already scanned by the caller: taken as is, reparse point or not.
+                            subdirectories.Add(graft);
+                            _graftParent = node;
+                            grafted = true;
+                            continue;
+                        }
+
                         if (_options.SkipReparsePoints && entry.IsReparsePoint) continue;
-                        subdirectories.Add(new DirectoryNode(entry.Name, Path.Join(node.FullPath, entry.Name), node));
+                        subdirectories.Add(new DirectoryNode(entry.Name, childPath, node));
                     }
                     else
                     {
@@ -130,18 +162,19 @@ public sealed class FileSystemScanner
             node.FilesSize = filesSize;
             node.FileCount = fileCount;
 
-            if (depth < _options.ParallelDepth && subdirectories.Count > 1)
+            var toScan = grafted ? subdirectories.Where(child => !ReferenceEquals(child, _graft)).ToList() : subdirectories;
+            if (depth < _options.ParallelDepth && toScan.Count > 1)
             {
                 var parallel = new ParallelOptions
                 {
                     MaxDegreeOfParallelism = _options.MaxDegreeOfParallelism,
                     CancellationToken = _cancellationToken,
                 };
-                Parallel.ForEach(subdirectories, parallel, child => ScanDirectory(child, depth + 1));
+                Parallel.ForEach(toScan, parallel, child => ScanDirectory(child, depth + 1));
             }
             else
             {
-                foreach (var child in subdirectories)
+                foreach (var child in toScan)
                     ScanDirectory(child, depth + 1);
             }
 

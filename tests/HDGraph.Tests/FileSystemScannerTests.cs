@@ -25,6 +25,7 @@ public sealed class FileSystemScannerTests
         Assert.Equal(5, root.TotalFileCount);
         Assert.Equal(4, root.TotalDirectoryCount);
         Assert.Null(root.Error);
+        Assert.Null(root.Parent);
         Assert.Equal(0, tree.Result.ErrorCount);
         Assert.Equal(Path.GetFileName(tree.RootPath), root.Name);
 
@@ -45,7 +46,7 @@ public sealed class FileSystemScannerTests
         Assert.Equal(0, c.TotalSize);
         Assert.Empty(c.Children);
 
-        AssertDepthsAreConsistent(root);
+        AssertParentsAreConsistent(root);
     }
 
     [Fact]
@@ -146,12 +147,101 @@ public sealed class FileSystemScannerTests
         }
     }
 
-    private static void AssertDepthsAreConsistent(DirectoryNode node)
+    [Fact]
+    public async Task GraftIsAttachedWhereTheScanReachesIt()
+    {
+        await using var tree = await ScannedTestTree.CreateAsync();
+        var scanner = new FileSystemScanner(new ScanOptions { ProgressInterval = TimeSpan.Zero });
+        var a = (await scanner.ScanAsync(Path.Combine(tree.RootPath, "a"))).Root;
+        Assert.Null(a.Parent);
+
+        var progress = new RecordingProgress();
+        var extended = await scanner.ScanAsync(tree.RootPath, progress, graft: a);
+        var root = extended.Root;
+
+        Assert.Same(a, root.Children[0]);
+        Assert.Same(root, a.Parent);
+        Assert.Same(root, a.Children[0].Root);
+        Assert.Equal(ExpectedRootTotalSize, root.TotalSize);
+        Assert.Equal(5, root.TotalFileCount);
+        Assert.Equal(4, root.TotalDirectoryCount);
+        Assert.Same(a.Children[0], root.FindByPath(Path.Combine(tree.RootPath, "a", "sub")));
+        AssertParentsAreConsistent(root);
+
+        // The grafted part is not read again: progress counts only what this scan did.
+        var final = progress.Reports[^1];
+        Assert.Equal(3, final.DirectoriesScanned);
+        Assert.Equal(ExpectedRootTotalSize - ExpectedATotalSize, final.BytesFound);
+    }
+
+    [Fact]
+    public async Task GraftTwoLevelsDownIsReachedThroughItsScannedParent()
+    {
+        await using var tree = await ScannedTestTree.CreateAsync();
+        var scanner = new FileSystemScanner();
+        var sub = (await scanner.ScanAsync(Path.Combine(tree.RootPath, "a", "sub"))).Root;
+
+        var extended = await scanner.ScanAsync(tree.RootPath, graft: sub);
+        var a = extended.Root.Children[0];
+
+        Assert.Equal("a", a.Name);
+        Assert.Same(sub, Assert.Single(a.Children));
+        Assert.Same(a, sub.Parent);
+        Assert.Equal(ExpectedATotalSize, a.TotalSize);
+        Assert.Equal(ExpectedRootTotalSize, extended.Root.TotalSize);
+    }
+
+    [Fact]
+    public async Task GraftOutsideTheScannedPathIsRejected()
+    {
+        await using var tree = await ScannedTestTree.CreateAsync();
+        var scanner = new FileSystemScanner();
+        var b = (await scanner.ScanAsync(Path.Combine(tree.RootPath, "b"))).Root;
+
+        await Assert.ThrowsAsync<ArgumentException>(() => scanner.ScanAsync(Path.Combine(tree.RootPath, "a"), graft: b));
+        await Assert.ThrowsAsync<ArgumentException>(() => scanner.ScanAsync(Path.Combine(tree.RootPath, "b"), graft: b));
+        Assert.Null(b.Parent);
+
+        // A node inside a tree cannot be grafted: its old tree would be left pointing at it.
+        await Assert.ThrowsAsync<ArgumentException>(() => scanner.ScanAsync(tree.RootPath, graft: tree.Root.Children[0]));
+    }
+
+    [Fact]
+    public async Task CancelledScanLeavesTheGraftDetached()
+    {
+        await using var tree = await ScannedTestTree.CreateAsync();
+        var scanner = new FileSystemScanner();
+        var a = (await scanner.ScanAsync(Path.Combine(tree.RootPath, "a"))).Root;
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => scanner.ScanAsync(tree.RootPath, cancellationToken: cts.Token, graft: a));
+
+        Assert.Null(a.Parent);
+    }
+
+    [Fact]
+    public async Task GraftWhoseDirectoryIsGoneStaysDetached()
+    {
+        await using var tree = await ScannedTestTree.CreateAsync();
+        var scanner = new FileSystemScanner();
+        var a = (await scanner.ScanAsync(Path.Combine(tree.RootPath, "a"))).Root;
+        Directory.Delete(Path.Combine(tree.RootPath, "a"), recursive: true);
+
+        var extended = await scanner.ScanAsync(tree.RootPath, graft: a);
+
+        Assert.Null(a.Parent);
+        Assert.DoesNotContain(extended.Root.Children, static c => c.Name == "a");
+        Assert.Equal(ScannedTestTree.RootFileSize + ScannedTestTree.BFileSize, extended.Root.TotalSize);
+    }
+
+    private static void AssertParentsAreConsistent(DirectoryNode node)
     {
         foreach (var child in node.Children)
         {
-            Assert.Equal(node.Depth + 1, child.Depth);
-            AssertDepthsAreConsistent(child);
+            Assert.Same(node, child.Parent);
+            AssertParentsAreConsistent(child);
         }
     }
 
